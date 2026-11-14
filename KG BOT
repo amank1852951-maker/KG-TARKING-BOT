@@ -1,0 +1,76 @@
+import os
+from telegram import KeyboardButton, ReplyKeyboardMarkup, Update
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    ContextTypes,
+    MessageHandler,
+    filters,
+
+BOT_TOKEN = os.environ.get("8953264584:AAGYI0M5CvCzV0j9ZhQ7WGNklKL2WM7hYLA")
+BOT_USERNAME = os.environ.get("BOT_USERNAME")
+
+pending_referrals = {}
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    args = context.args
+
+    if args:
+        try:
+            referrer_id = int(args[0])
+            if referrer_id == user.id:
+                await update.message.reply_text("Aap apne khud ke link par hain! Yeh link kisi aur ko bhejiye.")
+                return
+
+            pending_referrals[user.id] = referrer_id
+
+            location_button = KeyboardButton(text="📍 Share My Location", request_location=True)
+            reply_markup = ReplyKeyboardMarkup([[location_button]], resize_keyboard=True, one_time_keyboard=True)
+
+            await update.message.reply_text(
+                "Hello! Aapke dost ne aapki location mangi hai. Apna location share karne ke liye niche diye gaye button par click karein:",
+                reply_markup=reply_markup
+            )
+        except ValueError:
+            await update.message.reply_text("Invalid link!")
+    else:
+        user_id = user.id
+        referral_link = f"https://t.me/{BOT_USERNAME}?start={user_id}"
+        await update.message.reply_text(
+            f"👋 Swagat hai!\n\nAapka unique tracking link yeh raha. Is link ko copy karke apne dost ko bhejiye:\n\n`{referral_link}`\n\nJab wo is par click karke apni location share karega, toh wo aapko mil jayegi!",
+            parse_mode="Markdown"
+        )
+
+async def handle_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_b = update.effective_user
+    user_location = update.message.location
+
+    lat = user_location.latitude
+    lon = user_location.longitude
+    maps_link = f"https://www.google.com/maps?q={lat},{lon}"
+
+    if user_b.id in pending_referrals:
+        user_a_id = pending_referrals[user_b.id]
+        try:
+            await context.bot.send_message(
+                chat_id=user_a_id,
+                text=f"🚨 **New Location Received!**\n\n👤 User: {user_b.first_name}\n🗺️ Google Maps: {maps_link}",
+                parse_mode="Markdown"
+            )
+            await update.message.reply_text("✅ Aapki location safalta-purvak bhej di gayi hai!")
+        except Exception:
+            await update.message.reply_text("Location bhejne mein kuch samasya aayi.")
+        del pending_referrals[user_b.id]
+    else:
+        await update.message.reply_text("Dhanyavaad!")
+
+def main():
+    app = Application.builder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.LOCATION, handle_location))
+    print("Bot chal raha hai...")
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
